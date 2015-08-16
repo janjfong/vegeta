@@ -1,0 +1,7 @@
+- Unit test new and changed code
+- Document new a changed code
+- Change targeters to take a target instead of returning one
+- Harden and test RoundRobinReader
+- Use ANSI control codes to update text reporters in place
+- Split lib into multiple packages
+- Improve flags UI

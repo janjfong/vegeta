@@ -1,43 +1,52 @@
 package vegeta
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 )
 
-// Dumper is an interface defining Results dumping.
-type Dumper interface {
-	Dump(*Result) ([]byte, error)
+// Dumper is a function type that represents Result dumpers.
+type Dumper func(io.Writer) error
+
+// NewCSVDumper returns a Dumper that dumps each incoming Result as a CSV
+// record with six columns. The columns are: unix timestamp in ns since epoch,
+// http status code, request latency in ns, bytes out, bytes in, and lastly the error.
+func NewCSVDumper(dec Decoder) Dumper {
+	return func(w io.Writer) (err error) {
+		var r Result
+		for {
+			if err = dec(&r); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(w, "%d,%d,%d,%d,%d,\"%s\"\n",
+				r.Timestamp.UnixNano(),
+				r.Code,
+				r.Latency.Nanoseconds(),
+				r.BytesOut,
+				r.BytesIn,
+				r.Error,
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 }
 
-// DumperFunc is an adapter to allow the use of ordinary functions as
-// Dumpers. If f is a function with the appropriate signature, DumperFunc(f)
-// is a Dumper object that calls f.
-type DumperFunc func(*Result) ([]byte, error)
-
-// Dump implements the Dumper interface.
-func (f DumperFunc) Dump(r *Result) ([]byte, error) { return f(r) }
-
-// DumpCSV dumps a Result as a CSV record with six columns.
-// The columns are: unix timestamp in ns since epoch, http status code,
-// request latency in ns, bytes out, bytes in, and lastly the error.
-var DumpCSV DumperFunc = func(r *Result) ([]byte, error) {
-	var buf bytes.Buffer
-	_, err := fmt.Fprintf(&buf, "%d,%d,%d,%d,%d,\"%s\"\n",
-		r.Timestamp.UnixNano(),
-		r.Code,
-		r.Latency.Nanoseconds(),
-		r.BytesOut,
-		r.BytesIn,
-		r.Error,
-	)
-	return buf.Bytes(), err
-}
-
-// DumpJSON dumps a Result as a JSON object.
-var DumpJSON DumperFunc = func(r *Result) ([]byte, error) {
-	var buf bytes.Buffer
-	err := json.NewEncoder(&buf).Encode(r)
-	return buf.Bytes(), err
+// NewJSONDumper returns a Dumper with dumps each incoming Result as a JSON object.
+func NewJSONDumper(dec Decoder) Dumper {
+	return func(w io.Writer) (err error) {
+		var r Result
+		enc := json.NewEncoder(w).Encode
+		for {
+			if err = dec(&r); err != nil {
+				return err
+			} else if err = enc(r); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 }
